@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 投研辅助工作流</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --line:#e6e8ec;
+    --text:#1f2430; --muted:#8a91a0; --navy:#1f3b73;
+    --up:#d9393b; --down:#11976a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; padding:32px 20px 64px; background:var(--bg); color:var(--text);
+    font-family:"Microsoft YaHei","PingFang SC",-apple-system,sans-serif;
+  }
+  .wrap{max-width:880px;margin:0 auto;}
+  h1{font-size:22px;margin:0 0 4px;color:var(--navy);letter-spacing:.5px;}
+  .sub{font-size:13px;color:var(--muted);margin-bottom:22px;}
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:20px 22px;margin-bottom:16px;
+  }
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  input{
+    flex:1;min-width:200px;padding:11px 14px;font-size:15px;
+    border:1px solid var(--line);border-radius:8px;outline:none;
+    font-family:inherit;background:#fbfcfd;
+  }
+  input:focus{border-color:var(--navy);background:#fff;}
+  button{
+    padding:11px 22px;font-size:15px;border:none;border-radius:8px;cursor:pointer;
+    background:var(--navy);color:#fff;font-family:inherit;transition:.15s;
+  }
+  button:hover{background:#16305e;}
+  button:disabled{background:#b9c1cf;cursor:not-allowed;}
+  .hint{font-size:12px;color:var(--muted);margin-top:10px;}
+  .hint code{background:#eef0f4;padding:1px 5px;border-radius:3px;}
+
+  /* 行情卡 */
+  .quote{display:none;}
+  .quote.show{display:block;}
+  .q-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;}
+  .q-name{font-size:19px;font-weight:700;}
+  .q-code{font-size:13px;color:var(--muted);margin-left:8px;font-weight:400;}
+  .q-time{font-size:12px;color:var(--muted);}
+  .q-price{font-size:34px;font-weight:700;line-height:1.1;}
+  .q-chg{font-size:15px;margin-left:10px;font-weight:600;}
+  .up{color:var(--up);} .down{color:var(--down);} .flat{color:var(--muted);}
+  .q-grid{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:10px 18px;
+    margin-top:18px;padding-top:16px;border-top:1px solid var(--line);
+  }
+  .q-item .k{font-size:12px;color:var(--muted);margin-bottom:3px;}
+  .q-item .v{font-size:14px;font-weight:600;}
+
+  /* AI 区 */
+  .ai-title{
+    font-size:13px;font-weight:700;color:var(--navy);
+    display:flex;align-items:center;gap:8px;margin-bottom:12px;
+  }
+  .badge{
+    font-size:11px;font-weight:400;padding:2px 8px;border-radius:10px;
+    background:#eef1f7;color:#5a6a8a;border:1px solid #dde3ee;
+  }
+  .badge.mock{background:#fff6e5;color:#a5761b;border-color:#f2e2c2;}
+  .ai-body{
+    font-size:14.5px;line-height:1.9;white-space:pre-wrap;min-height:24px;
+    word-break:break-word;
+  }
+  .cursor{
+    display:inline-block;width:7px;height:16px;background:var(--navy);
+    vertical-align:-2px;animation:blink .9s steps(1) infinite;
+  }
+  @keyframes blink{50%{opacity:0;}}
+  .err{color:#c0392b;font-size:14px;}
+  .warn{
+    margin-top:12px;padding:9px 12px;font-size:12.5px;line-height:1.65;
+    background:#fff8e8;border:1px solid #f0dfb8;border-radius:6px;color:#8a6a1c;
+  }
+  .warn b{font-weight:700;}
+  .empty{color:var(--muted);font-size:14px;}
+  .foot{margin-top:28px;font-size:12px;color:var(--muted);text-align:center;}
+  @media(max-width:640px){
+    .q-grid{grid-template-columns:repeat(2,1fr);}
+    .q-price{font-size:28px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AI 投研辅助工作流</h1>
+  <div class="sub">输入股票代码 → 抓取实时行情 → 大模型生成盘面解读（流式输出）</div>
+
+  <div class="card">
+    <div class="row">
+      <input id="code" placeholder="输入 6 位股票代码，例如 600519" maxlength="12" autocomplete="off">
+      <button id="go">开始分析</button>
+    </div>
+    <div class="hint">
+      示例：<code>600519</code> 贵州茅台 ｜ <code>000001</code> 平安银行 ｜ <code>300750</code> 宁德时代
+    </div>
+  </div>
+
+  <div class="card quote" id="quoteCard">
+    <div class="q-head">
+      <div>
+        <div><span class="q-name" id="qName">—</span><span class="q-code" id="qCode"></span></div>
+        <div class="q-time" id="qTime"></div>
+      </div>
+    </div>
+    <div>
+      <span class="q-price" id="qPrice">—</span><span class="q-chg" id="qChg"></span>
+    </div>
+    <div class="q-grid">
+      <div class="q-item"><div class="k">今开</div><div class="v" id="kOpen">—</div></div>
+      <div class="q-item"><div class="k">昨收</div><div class="v" id="kPrev">—</div></div>
+      <div class="q-item"><div class="k">最高</div><div class="v" id="kHigh">—</div></div>
+      <div class="q-item"><div class="k">最低</div><div class="v" id="kLow">—</div></div>
+      <div class="q-item"><div class="k">振幅</div><div class="v" id="kAmp">—</div></div>
+      <div class="q-item"><div class="k">成交量</div><div class="v" id="kVol">—</div></div>
+      <div class="q-item"><div class="k">成交额</div><div class="v" id="kAmt">—</div></div>
+      <div class="q-item"><div class="k">代码</div><div class="v" id="kSym">—</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ai-title">AI 盘面解读 <span class="badge" id="modeBadge">待分析</span></div>
+    <div class="ai-body" id="aiBody"><span class="empty">尚未开始。输入代码后点击「开始分析」。</span></div>
+  </div>
+
+  <div class="foot">行情数据来源：新浪财经公开接口 ｜ AI 生成内容不构成投资建议</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = (n, d = 2) => (n === undefined || n === null || isNaN(n)) ? '—' : Number(n).toFixed(d);
+
+let currentSource = null;
+
+function setMode(text, isMock) {
+  const b = $('modeBadge');
+  b.textContent = text;
+  b.className = 'badge' + (isMock ? ' mock' : '');
+}
+
+function renderQuote(q) {
+  $('qName').textContent = q.name;
+  $('qCode').textContent = q.symbol.toUpperCase();
+  $('qTime').textContent = q.date + ' ' + q.time;
+  $('qPrice').textContent = fmt(q.price);
+  const up = q.change > 0, down = q.change < 0;
+  const cls = up ? 'up' : (down ? 'down' : 'flat');
+  $('qPrice').className = 'q-price ' + cls;
+  const sign = up ? '+' : '';
+  $('qChg').textContent = sign + fmt(q.change) + '  ' + sign + fmt(q.change_pct) + '%';
+  $('qChg').className = 'q-chg ' + cls;
+
+  $('kOpen').textContent = fmt(q.open);
+  $('kPrev').textContent = fmt(q.prev_close);
+  $('kHigh').textContent = fmt(q.high);
+  $('kLow').textContent = fmt(q.low);
+  $('kAmp').textContent = fmt(q.amplitude) + '%';
+  $('kVol').textContent = Math.round(q.volume / 100).toLocaleString() + ' 手';
+  $('kAmt').textContent = (q.amount / 1e8).toFixed(2) + ' 亿';
+  $('kSym').textContent = q.symbol.toUpperCase();
+  $('quoteCard').classList.add('show');
+}
+
+async function analyze() {
+  const code = $('code').value.trim();
+  if (!code) { $('code').focus(); return; }
+
+  if (currentSource) { currentSource.close(); currentSource = null; }
+
+  const btn = $('go');
+  btn.disabled = true;
+  setMode('分析中…', false);
+  $('aiBody').innerHTML = '<span class="cursor"></span>';
+  $('quoteCard').classList.remove('show');
+
+  // 1) 先取行情（失败则直接提示，不发起流式请求）
+  let quote;
+  try {
+    const r = await fetch('/api/quote?code=' + encodeURIComponent(code));
+    quote = await r.json();
+  } catch (e) {
+    $('aiBody').innerHTML = '<span class="err">请求失败：' + e + '</span>';
+    btn.disabled = false; setMode('失败', false); return;
+  }
+
+  if (!quote.ok) {
+    $('aiBody').innerHTML = '<span class="err">' + quote.error + '</span>';
+    btn.disabled = false; setMode('失败', false); return;
+  }
+
+  renderQuote(quote);
+
+  // 2) 流式接收 AI 解读
+  const body = $('aiBody');
+  body.textContent = '';
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor';
+  body.appendChild(cursor);
+
+  currentSource = new EventSource('/api/analyze?code=' + encodeURIComponent(code));
+
+  currentSource.onmessage = ev => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'meta') {
+      setMode(msg.mode === 'mock' ? '演示模式' : '模型：' + msg.model, msg.mode === 'mock');
+    } else if (msg.type === 'delta') {
+      cursor.insertAdjacentText('beforebegin', msg.text);
+    } else if (msg.type === 'final') {
+      // 输出校验层命中：用清洗后的文本替换展示，并提示过滤了哪些表述
+      cursor.remove();
+      body.textContent = msg.text;
+      if (msg.violations && msg.violations.length) {
+        const reasons = [];
+        msg.violations.forEach(v => { if (reasons.indexOf(v.reason) < 0) reasons.push(v.reason); });
+        const tip = document.createElement('div');
+        tip.className = 'warn';
+        tip.innerHTML = '<b>已自动过滤 ' + msg.violations.length + ' 处无数据支撑的表述</b><br>' +
+                        '原因：' + reasons.join('；');
+        body.appendChild(tip);
+        setMode('已校验（过滤 ' + msg.violations.length + ' 处）', true);
+      }
+      currentSource.close(); currentSource = null;
+      btn.disabled = false;
+    } else if (msg.type === 'done') {
+      cursor.remove();
+      currentSource.close(); currentSource = null;
+      btn.disabled = false;
+    } else if (msg.type === 'error') {
+      cursor.remove();
+      const d = document.createElement('div');
+      d.className = 'err';
+      d.textContent = '生成失败：' + msg.message;
+      body.appendChild(d);
+      currentSource.close(); currentSource = null;
+      btn.disabled = false;
+      setMode('失败', false);
+    }
+  };
+
+  currentSource.onerror = () => {
+    if (currentSource) { currentSource.close(); currentSource = null; }
+    cursor.remove();
+    if (body.textContent.trim() === '') {
+      body.innerHTML = '<span class="err">连接中断，请重试</span>';
+    }
+    btn.disabled = false;
+  };
+}
+
+$('go').addEventListener('click', analyze);
+$('code').addEventListener('keydown', e => { if (e.key === 'Enter') analyze(); });
+
+// 启动时探测是否配置了 LLM
+fetch('/api/config').then(r => r.json()).then(cfg => {
+  if (!cfg.llm_configured) {
+    setMode('演示模式（未配置 Key）', true);
+  } else {
+    setMode('已就绪：' + cfg.model, false);
+  }
+}).catch(() => {});
+</script>
+</body>
+</html>
