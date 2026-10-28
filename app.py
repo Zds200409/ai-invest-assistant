@@ -347,13 +347,43 @@ class Handler(BaseHTTPRequestHandler):
         return
 
 
+def _already_running():
+    """检测本机同端口上是否已有本服务在跑（Windows 下 SO_REUSEADDR 允许重复绑定，
+    所以不能只靠 bind 失败来判断）。"""
+    try:
+        import urllib.request
+        with urllib.request.urlopen('http://127.0.0.1:%d/api/config' % PORT, timeout=1.5) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
 def main():
     print('=' * 56)
     print('AI 投研辅助工作流')
     print('  地址      : http://127.0.0.1:%d' % PORT)
     print('  LLM 模式  : %s' % ('已配置（%s）' % LLM_MODEL if LLM_API_KEY else '演示模式（未配置 LLM_API_KEY）'))
     print('=' * 56)
-    server = ThreadingHTTPServer(('127.0.0.1', PORT), Handler)
+
+    if _already_running():
+        print()
+        print('服务已经在运行，无需重复启动。')
+        print('直接用浏览器打开： http://127.0.0.1:%d' % PORT)
+        print()
+        print('如需重启：先关掉原来那个窗口（或在原窗口按 Ctrl+C），再运行本脚本。')
+        return
+
+    try:
+        server = ThreadingHTTPServer(('127.0.0.1', PORT), Handler)
+    except OSError as exc:
+        print()
+        print('【启动失败】端口 %d 无法监听。' % PORT)
+        print('常见原因：已经有一个实例在运行，先把那个窗口关掉再启动。')
+        print('  查看占用进程：netstat -ano | findstr :%d' % PORT)
+        print('  结束进程    ：taskkill /PID <上面查到的PID> /F')
+        print('原始错误：%s' % exc)
+        return
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -1,22 +1,29 @@
 @echo off
-chcp 65001 >nul
 cd /d "%~dp0"
 
+set PY=python
+where python >nul 2>nul
+if errorlevel 1 set PY=E:\Python\python.exe
+
 echo ============================================================
-echo   AI 投研辅助工作流
+echo   AI Investment Research Assistant
 echo ============================================================
 echo.
-echo   启动后请用浏览器打开:  http://127.0.0.1:8000
-echo   停止服务: 按 Ctrl+C
+echo   1) Keep this window OPEN while using the app
+echo   2) Open browser at:  http://127.0.0.1:8000
+echo   3) Stop the service: press Ctrl+C, or close this window
 echo.
-echo   当前模式: 演示模式（未配置 LLM_API_KEY）
-echo   配置真实模型请参考 README.md 第三节
-echo.
+echo   Model config: edit the .env file in this folder
 echo ============================================================
 echo.
 
-python app.py
+"%PY%" app.py
 
 echo.
-echo 服务已停止。
+echo ------------------------------------------------------------
+echo Service stopped.
+if errorlevel 1 (
+  echo [ERROR] Startup failed - please read the message above.
+)
+echo ------------------------------------------------------------
 pause
